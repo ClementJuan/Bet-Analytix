@@ -1,7 +1,6 @@
 streamlit
 st-gsheets-connection
+gspread
 easyocr
 pandas
 opencv-python-headless
-st-gsheets-connection
-gspread
