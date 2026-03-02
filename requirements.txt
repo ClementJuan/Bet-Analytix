@@ -3,3 +3,5 @@ st-gsheets-connection
 easyocr
 pandas
 opencv-python-headless
+st-gsheets-connection
+gspread
