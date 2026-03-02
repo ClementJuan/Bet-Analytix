@@ -8,20 +8,15 @@ import numpy as np
 from datetime import datetime
 
 # --- CONFIGURATION ---
-# On ne met plus l'URL ici, on la récupère proprement dans les Secrets
-try:
-    URL_SHEET = st.secrets["connections"]["gsheets"]["spreadsheet"]
-except:
-    URL_SHEET = "" # Pour éviter de faire planter l'app au démarrage
-    
 BK_INITIALE = 1000.0
 
 # --- CONNEXION GOOGLE SHEETS ---
+# On crée la connexion sans passer d'URL ici, elle sera lue dans les Secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # On utilise l'URL récupérée des secrets
-    return conn.read(spreadsheet=URL_SHEET, worksheet="Suivi")
+    # On laisse Streamlit chercher l'URL tout seul dans st.secrets["connections"]["gsheets"]["spreadsheet"]
+    return conn.read(worksheet="Suivi")
 
 # --- IA OCR ---
 @st.cache_resource
@@ -140,3 +135,4 @@ if not df_load.empty:
     st.dataframe(df_filtered.sort_index(ascending=False), hide_index=True, use_container_width=True)
 else:
     st.info("Aucune donnée détectée sur la Google Sheet.")
+
