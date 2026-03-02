@@ -1,34 +1,32 @@
 import streamlit as st
-import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 import easyocr
 import re
+import pandas as pd
 import cv2
 import numpy as np
 from datetime import datetime
 
 # --- CONFIGURATION ---
-SHEET_ID = "12c9Qo55cPvH01k3OiLbiWNR3MBmaBQoRYZY76a9ltkA"
-# Lien pour la lecture (Pandas)
-URL_READ = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Suivi"
-# Lien pour l'écriture (GSheets Connection)
-URL_WRITE = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
 BK_INITIALE = 1000.0
 
-st.set_page_config(page_title="BetTracker AI", layout="wide")
+# --- CONNEXION GOOGLE SHEETS ---
+# La connexion va lire automatiquement l'URL et les clés dans tes "Secrets"
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- CHARGEMENT IA ---
+def load_data():
+    try:
+        # On lit l'onglet "Suivi"
+        return conn.read(worksheet="Suivi")
+    except:
+        return pd.DataFrame()
+
+# --- IA OCR ---
 @st.cache_resource
 def load_ocr():
     return easyocr.Reader(['fr'], gpu=False)
 
 reader = load_ocr()
-
-# --- FONCTIONS ---
-def load_data():
-    try:
-        return pd.read_csv(URL_READ)
-    except:
-        return pd.DataFrame()
 
 def extraire_donnees(image_file):
     file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
@@ -37,15 +35,28 @@ def extraire_donnees(image_file):
     lignes = [res[1] for res in resultats]
     texte_full = " ".join(lignes).lower()
 
-    sport = "Foot" if any(m in texte_full for m in ["foot", "ligue"]) else "Basket" if "nba" in texte_full else "Autre"
-    
-    # Extraction simplifiée des chiffres
+    # Logique Sport simple
+    sport = "Foot"
+    if any(m in texte_full for m in ["nba", "basket"]): sport = "Basket"
+    elif "tennis" in texte_full: sport = "Tennis"
+
+    # Extraction des nombres (Cote, Mise, Gains)
     nombres = re.findall(r"\d+[\.,]\d+", texte_full)
-    nombres = [float(n.replace(',', '.')) for n in nombres]
+    nombres_propres = [float(n.replace(',', '.')) for n in nombres]
     
-    cote = nombres[0] if len(nombres) > 0 else 1.50
-    mise = nombres[1] if len(nombres) > 1 else 10.0
-    gains = nombres[2] if len(nombres) > 2 else 0.0
+    cote = nombres_propres[0] if len(nombres_propres) > 0 else 1.0
+    mise = 0.0
+    gains = 0.0
+
+    # Recherche spécifique pour Mise et Gain
+    for res in resultats:
+        txt = res[1].lower()
+        if "mise" in txt:
+            m = re.search(r"\d+[\.,]\d+", txt)
+            if m: mise = float(m.group().replace(',', '.'))
+        if "gain" in txt or "total" in txt:
+            v = re.findall(r"\d+[\.,]\d+", txt)
+            if v: gains = float(v[-1].replace(',', '.'))
 
     return {
         "Date": datetime.now().strftime("%d/%m/%Y"),
@@ -54,43 +65,51 @@ def extraire_donnees(image_file):
         "Intitulé": "Pari IA",
         "Cote": cote,
         "Mise €": mise,
-        "Statut": "Gagné" if gains > 0 else "Perdu",
+        "Statut": "Gagné" if gains > mise else "Perdu",
         "Net €": round(gains - mise, 2) if gains > 0 else -mise
     }
 
 # --- INTERFACE ---
+st.set_page_config(page_title="BetTracker AI", layout="wide")
 st.title("📊 BetTracker Cloud AI")
 
+# Chargement des données au démarrage
 df_load = load_data()
 
-# Sidebar
+# --- SIDEBAR : AJOUT ---
 st.sidebar.header("📥 Nouveau Ticket")
-uploaded_file = st.sidebar.file_uploader("Capture", type=['png', 'jpg', 'jpeg'])
+uploaded_file = st.sidebar.file_uploader("Prendre une photo du ticket", type=['png', 'jpg', 'jpeg'])
 
-if uploaded_file and st.sidebar.button("Analyser & Enregistrer"):
-    with st.spinner('L\'IA analyse le ticket...'):
+if uploaded_file and st.sidebar.button("Analyser & Envoyer au Cloud"):
+    with st.spinner('L\'IA analyse votre ticket...'):
+        # 1. Extraction
         data = extraire_donnees(uploaded_file)
         new_row = pd.DataFrame([data])
-        # Note: L'écriture nécessite que les Secrets soient bien configurés
-        from streamlit_gsheets import GSheetsConnection
-        conn = st.connection("gsheets", type=GSheetsConnection)
         
-        updated_df = pd.concat([df_load, new_row], ignore_index=True)
-        conn.update(spreadsheet=URL_WRITE, worksheet="Suivi", data=updated_df)
-        st.sidebar.success("Ticket ajouté au Cloud !")
+        # 2. Mise à jour du DataFrame
+        if df_load.empty:
+            updated_df = new_row
+        else:
+            updated_df = pd.concat([df_load, new_row], ignore_index=True)
+        
+        # 3. Envoi vers Google Sheets (Utilise les secrets)
+        conn.update(worksheet="Suivi", data=updated_df)
+        
+        st.sidebar.success("Ticket enregistré avec succès !")
         st.rerun()
 
-# Dashboard
+# --- DASHBOARD ---
 if not df_load.empty:
     # Métriques
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     benef = df_load['Net €'].sum()
-    c1.metric("Bénéfice Net", f"{benef:.2f} €")
-    c2.metric("ROI", f"{(benef/df_load['Mise €'].sum()*100):.1f}%" if df_load['Mise €'].sum()>0 else "0%")
-    c3.metric("Bankroll", f"{BK_INITIALE + benef:.2f} €")
+    c1.metric("Paris", len(df_load))
+    c2.metric("Bénéfices", f"{benef:.2f} €")
+    c3.metric("ROI", f"{(benef/df_load['Mise €'].sum()*100):.1f}%" if df_load['Mise €'].sum()>0 else "0%")
+    c4.metric("Bankroll", f"{BK_INITIALE + benef:.2f} €")
 
     # Tableau
-    st.subheader("📋 Historique")
-    st.dataframe(df_load, use_container_width=True, hide_index=True)
+    st.subheader("📋 Historique des paris")
+    st.dataframe(df_load.sort_index(ascending=False), hide_index=True, use_container_width=True)
 else:
-    st.info("Le fichier est connecté. Ajoutez votre premier ticket !")
+    st.info("Aucune donnée. Importez votre premier ticket via la barre latérale !")
