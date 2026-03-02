@@ -1,19 +1,24 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-st.title("Test Connexion Google Sheets")
+st.title("📊 BetTracker Cloud (Méthode Directe)")
 
-# URL directe pour forcer le test
-URL_TEST = "https://docs.google.com/spreadsheets/d/12c9Qo55cPvH01k3OiLbiWNR3MBmaBQoRYZY76a9ltkA"
+# 1. On transforme ton URL en lien de téléchargement direct
+SHEET_ID = "12c9Qo55cPvH01k3OiLbiWNR3MBmaBQoRYZY76a9ltkA"
+URL_CSV = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Suivi"
 
-conn = st.connection("gsheets", type=GSheetsConnection)
+def load_data():
+    try:
+        # On lit directement le CSV via Pandas
+        return pd.read_csv(URL_CSV)
+    except Exception as e:
+        st.error(f"Erreur de lecture : {e}")
+        return pd.DataFrame()
 
-try:
-    # On force l'URL ici pour voir si ça débloque
-    df = conn.read(spreadsheet=URL_TEST, worksheet="Suivi")
+df_load = load_data()
+
+if not df_load.empty:
     st.success("Connexion réussie !")
-    st.write(df)
-except Exception as e:
-    st.error(f"Erreur de connexion : {e}")
-
+    st.dataframe(df_load, hide_index=True)
+else:
+    st.info("La feuille est vide ou inaccessible. Vérifiez qu'il y a du texte en A1.")
