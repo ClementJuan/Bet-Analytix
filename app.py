@@ -91,9 +91,10 @@ if uploaded_file and st.sidebar.button("Analyser & Envoyer au Cloud"):
             updated_df = new_row
         else:
             updated_df = pd.concat([df_load, new_row], ignore_index=True)
-        
-        # 3. Envoi vers Google Sheets (Utilise les secrets)
-        conn.update(worksheet="Suivi", data=updated_df)
+
+     # On force l'URL exacte pour éviter toute erreur de permission fantôme
+spreadsheet_url = "https://docs.google.com/spreadsheets/d/12c9Qo55cPvH01k3OiLbiWNR3MBmaBQoRYZY76a9ltkA/edit"
+conn.update(spreadsheet=spreadsheet_url, worksheet="Suivi", data=updated_df)
         
         st.sidebar.success("Ticket enregistré avec succès !")
         st.rerun()
@@ -113,3 +114,4 @@ if not df_load.empty:
     st.dataframe(df_load.sort_index(ascending=False), hide_index=True, use_container_width=True)
 else:
     st.info("Aucune donnée. Importez votre premier ticket via la barre latérale !")
+
