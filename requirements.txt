@@ -1,0 +1,5 @@
+streamlit
+st-gsheets-connection
+easyocr
+pandas
+opencv-python-headless
