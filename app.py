@@ -8,14 +8,19 @@ import numpy as np
 from datetime import datetime
 
 # --- CONFIGURATION ---
-# Remplace par l'URL de ta Google Sheet (Partager -> Copier le lien)
-URL_SHEET = "TON_URL_GOOGLE_SHEET_ICI"
+# On ne met plus l'URL ici, on la récupère proprement dans les Secrets
+try:
+    URL_SHEET = st.secrets["connections"]["gsheets"]["spreadsheet"]
+except:
+    URL_SHEET = "" # Pour éviter de faire planter l'app au démarrage
+    
 BK_INITIALE = 1000.0
 
 # --- CONNEXION GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
+    # On utilise l'URL récupérée des secrets
     return conn.read(spreadsheet=URL_SHEET, worksheet="Suivi")
 
 # --- IA OCR ---
